@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "803227380990",
+    "project_id": "rajay-wala-dairy",
+    "storage_bucket": "rajay-wala-dairy.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:803227380990:android:5c47c0698b3cf01a80c9af",
+        "android_client_info": {
+          "package_name": "com.example.rajay_wala_dairy"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB4ML0qPADvT4Kan10c58TrRaYFGh4ztwg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

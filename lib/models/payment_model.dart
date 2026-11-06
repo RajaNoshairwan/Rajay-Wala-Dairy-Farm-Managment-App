@@ -6,7 +6,8 @@ class PaymentModel {
   final String? invoiceId;
   final double amount;
   final DateTime paymentDate;
-  final String method;
+  final String method; // 'cash' | 'online'
+  final String status; // 'received' | 'pending'
   final String recordedBy;
   final String note;
 
@@ -17,6 +18,7 @@ class PaymentModel {
     required this.amount,
     required this.paymentDate,
     this.method = 'cash',
+    this.status = 'received',
     required this.recordedBy,
     this.note = '',
   });
@@ -24,14 +26,15 @@ class PaymentModel {
   factory PaymentModel.fromMap(String id, Map<String, dynamic> map) {
     return PaymentModel(
       paymentId: id,
-      customerId: map['customerId'] ?? '',
-      invoiceId: map['invoiceId'],
-      amount: (map['amount'] ?? 0).toDouble(),
+      customerId: (map['customerId'] ?? '') as String,
+      invoiceId: map['invoiceId'] as String?,
+      amount: ((map['amount'] ?? 0) as num).toDouble(),
       paymentDate:
       (map['paymentDate'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      method: map['method'] ?? 'cash',
-      recordedBy: map['recordedBy'] ?? '',
-      note: map['note'] ?? '',
+      method: (map['method'] ?? 'cash') as String,
+      status: (map['status'] ?? 'received') as String,
+      recordedBy: (map['recordedBy'] ?? '') as String,
+      note: (map['note'] ?? '') as String,
     );
   }
 
@@ -41,6 +44,7 @@ class PaymentModel {
     'amount': amount,
     'paymentDate': Timestamp.fromDate(paymentDate),
     'method': method,
+    'status': status,
     'recordedBy': recordedBy,
     'note': note,
   };

@@ -7,21 +7,32 @@ import '../models/ledger_entry_model.dart';
 class BillingService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  /// Recompute outstanding = total delivery amounts - total payments.
-  /// Works even before any invoice is generated.
+  /// Outstanding = total deliveries − received payments.
+  /// Pending payments do NOT reduce outstanding.
   Future<double> recomputeOutstanding(String customerId) async {
-    final records = await _db.collection('delivery_records').where('customerId', isEqualTo: customerId).get();
-    final payments = await _db.collection('payments').where('customerId', isEqualTo: customerId).get();
+    final records = await _db
+        .collection('delivery_records')
+        .where('customerId', isEqualTo: customerId)
+        .get();
+    final payments = await _db
+        .collection('payments')
+        .where('customerId', isEqualTo: customerId)
+        .get();
 
     double owed = 0, paid = 0;
     for (final d in records.docs) {
       owed += ((d.data()['amount'] ?? 0) as num).toDouble();
     }
     for (final d in payments.docs) {
+      final status = (d.data()['status'] as String?) ?? 'received';
+      if (status == 'pending') continue;
       paid += ((d.data()['amount'] ?? 0) as num).toDouble();
     }
     final outstanding = owed - paid;
-    await _db.collection('users').doc(customerId).update({'outstandingBalance': outstanding});
+    await _db
+        .collection('users')
+        .doc(customerId)
+        .update({'outstandingBalance': outstanding});
     return outstanding;
   }
 
@@ -33,7 +44,10 @@ class BillingService {
     final startOfMonth = DateTime(year, month, 1);
     final endOfMonth = DateTime(year, month + 1, 1);
 
-    final recordsSnap = await _db.collection('delivery_records').where('customerId', isEqualTo: customerId).get();
+    final recordsSnap = await _db
+        .collection('delivery_records')
+        .where('customerId', isEqualTo: customerId)
+        .get();
     double totalMilkAmount = 0;
     for (final doc in recordsSnap.docs) {
       final r = DeliveryRecordModel.fromMap(doc.id, doc.data());
@@ -51,19 +65,29 @@ class BillingService {
         .limit(1)
         .get();
     if (prevInvoiceSnap.docs.isNotEmpty) {
-      openingBalance = ((prevInvoiceSnap.docs.first.data()['closingBalance'] ?? 0) as num).toDouble();
+      openingBalance = ((prevInvoiceSnap.docs.first.data()['closingBalance'] ??
+          0) as num)
+          .toDouble();
     }
 
-    final paymentsSnap = await _db.collection('payments').where('customerId', isEqualTo: customerId).get();
+    final paymentsSnap = await _db
+        .collection('payments')
+        .where('customerId', isEqualTo: customerId)
+        .get();
     double paymentsReceived = 0;
     for (final doc in paymentsSnap.docs) {
-      final p = PaymentModel.fromMap(doc.id, doc.data());
-      if (!p.paymentDate.isBefore(startOfMonth) && p.paymentDate.isBefore(endOfMonth)) {
+      final data = doc.data();
+      final status = (data['status'] as String?) ?? 'received';
+      if (status == 'pending') continue;
+      final p = PaymentModel.fromMap(doc.id, data);
+      if (!p.paymentDate.isBefore(startOfMonth) &&
+          p.paymentDate.isBefore(endOfMonth)) {
         paymentsReceived += p.amount;
       }
     }
 
-    final closingBalance = openingBalance + totalMilkAmount - paymentsReceived;
+    final closingBalance =
+        openingBalance + totalMilkAmount - paymentsReceived;
     final invoiceId = 'INV-$year-$month-$customerId';
     final invoice = InvoiceModel(
       invoiceId: invoiceId,
@@ -74,18 +98,30 @@ class BillingService {
       totalMilkAmount: totalMilkAmount,
       paymentsReceived: paymentsReceived,
       closingBalance: closingBalance,
-      status: closingBalance <= 0 ? 'paid' : (paymentsReceived > 0 ? 'partiallyPaid' : 'unpaid'),
+      status: closingBalance <= 0
+          ? 'paid'
+          : (paymentsReceived > 0 ? 'partiallyPaid' : 'unpaid'),
       dueDate: DateTime(year, month + 1, 10),
       generatedAt: DateTime.now(),
     );
     await _db.collection('invoices').doc(invoiceId).set(invoice.toMap());
 
-    await _addLedgerEntry(customerId: customerId, description: 'Milk delivered (${totalMilkAmount.toStringAsFixed(0)} amount)', debit: totalMilkAmount);
+    await _addLedgerEntry(
+        customerId: customerId,
+        description:
+        'Milk delivered (${totalMilkAmount.toStringAsFixed(0)} amount)',
+        debit: totalMilkAmount);
     if (openingBalance > 0) {
-      await _addLedgerEntry(customerId: customerId, description: 'Previous balance', debit: openingBalance);
+      await _addLedgerEntry(
+          customerId: customerId,
+          description: 'Previous balance',
+          debit: openingBalance);
     }
     if (paymentsReceived > 0) {
-      await _addLedgerEntry(customerId: customerId, description: 'Payment received', credit: paymentsReceived);
+      await _addLedgerEntry(
+          customerId: customerId,
+          description: 'Payment received',
+          credit: paymentsReceived);
     }
 
     await recomputeOutstanding(customerId);
@@ -98,7 +134,10 @@ class BillingService {
     double debit = 0,
     double credit = 0,
   }) async {
-    final last = await _db.collection('ledger_entries').where('customerId', isEqualTo: customerId).get();
+    final last = await _db
+        .collection('ledger_entries')
+        .where('customerId', isEqualTo: customerId)
+        .get();
     double lastBalance = 0;
     for (final d in last.docs) {
       final bal = ((d.data()['balance'] ?? 0) as num).toDouble();
@@ -132,6 +171,7 @@ class BillingService {
       amount: amount,
       paymentDate: DateTime.now(),
       method: 'cash',
+      status: 'received',
       recordedBy: adminUid,
       note: note,
     );
@@ -143,7 +183,8 @@ class BillingService {
       if (invDoc.exists) {
         final inv = InvoiceModel.fromMap(invoiceId, invDoc.data()!);
         final newPayments = inv.paymentsReceived + amount;
-        final newClosing = inv.openingBalance + inv.totalMilkAmount - newPayments;
+        final newClosing =
+            inv.openingBalance + inv.totalMilkAmount - newPayments;
         await invRef.update({
           'paymentsReceived': newPayments,
           'closingBalance': newClosing,
@@ -152,7 +193,10 @@ class BillingService {
       }
     }
 
-    await _addLedgerEntry(customerId: customerId, description: 'Cash payment', credit: amount);
+    await _addLedgerEntry(
+        customerId: customerId,
+        description: 'Cash payment',
+        credit: amount);
     await recomputeOutstanding(customerId);
   }
 }

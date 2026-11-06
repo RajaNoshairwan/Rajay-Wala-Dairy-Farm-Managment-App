@@ -5,16 +5,27 @@ class CustomerService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   Stream<List<UserModel>> watchAllCustomers() {
-    return _db.collection('users').where('role', isEqualTo: 'customer').snapshots().map((s) {
-      final list = s.docs.map((d) => UserModel.fromMap(d.id, d.data())).toList();
-      list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    return _db
+        .collection('users')
+        .where('role', isEqualTo: 'customer')
+        .snapshots()
+        .map((s) {
+      final list =
+      s.docs.map((d) => UserModel.fromMap(d.id, d.data())).toList();
+      list.sort(
+              (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
       return list;
     });
   }
 
   Future<List<UserModel>> getAllCustomers() async {
-    final snap = await _db.collection('users').where('role', isEqualTo: 'customer').get();
-    return snap.docs.map((d) => UserModel.fromMap(d.id, d.data())).toList();
+    final snap = await _db
+        .collection('users')
+        .where('role', isEqualTo: 'customer')
+        .get();
+    return snap.docs
+        .map((d) => UserModel.fromMap(d.id, d.data()))
+        .toList();
   }
 
   Future<UserModel?> getCustomer(String uid) async {
@@ -28,7 +39,6 @@ class CustomerService {
     final map = user.toMap();
     map['uid'] = ref.id;
     map['createdByAdmin'] = true;
-    map['outstandingBalance'] = 0;
     await ref.set(map);
     return ref.id;
   }

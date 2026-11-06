@@ -52,6 +52,8 @@ dependencies:
   geocoding: ^3.0.0
   google_maps_flutter: ^2.10.0
   url_launcher: ^6.3.1
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
 
   # PDF & Invoices
   pdf: ^3.11.1

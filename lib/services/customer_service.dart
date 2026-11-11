@@ -48,4 +48,7 @@ class CustomerService {
 
   Future<void> blockCustomer(String uid, bool blocked) =>
       _db.collection('users').doc(uid).update({'isBlocked': blocked});
+
+  Future<void> setDead(String uid, bool isDead) =>
+      _db.collection('users').doc(uid).update({'isDead': isDead});
 }

@@ -16,6 +16,7 @@ class CustomerEditScreen extends StatefulWidget {
 
 class _State extends State<CustomerEditScreen> {
   late final TextEditingController _name;
+  late final TextEditingController _nickname;
   late final TextEditingController _phone;
   late final TextEditingController _emergency;
   late final TextEditingController _rate;
@@ -30,6 +31,7 @@ class _State extends State<CustomerEditScreen> {
     super.initState();
     final c = widget.customer;
     _name = TextEditingController(text: c.name);
+    _nickname = TextEditingController(text: c.nickname);
     _phone = TextEditingController(text: c.phone);
     _emergency = TextEditingController(text: c.emergencyContact);
     _rate = TextEditingController(text: c.ratePerKg.toStringAsFixed(0));
@@ -67,6 +69,7 @@ class _State extends State<CustomerEditScreen> {
         widget.customer.uid,
         {
           'name': _name.text.trim(),
+          'nickname': _nickname.text.trim(),
           'phone': _phone.text.trim(),
           'emergencyContact': _emergency.text.trim(),
           'ratePerKg': double.tryParse(_rate.text) ?? 0.0,
@@ -97,6 +100,10 @@ class _State extends State<CustomerEditScreen> {
         padding: const EdgeInsets.all(16),
         child: Column(children: [
           CustomTextField(controller: _name, label: 'Full Name'),
+          const SizedBox(height: 12),
+          CustomTextField(
+              controller: _nickname,
+              label: 'Nickname (for spreadsheet)'),
           const SizedBox(height: 12),
           CustomTextField(
               controller: _phone,
@@ -136,8 +143,7 @@ class _State extends State<CustomerEditScreen> {
                 Text(
                   '${_lat.toStringAsFixed(5)}, ${_lng.toStringAsFixed(5)}',
                   style: const TextStyle(
-                      fontSize: 11,
-                      color: AppColors.textSecondary),
+                      fontSize: 11, color: AppColors.textSecondary),
                 ),
               ],
             ),

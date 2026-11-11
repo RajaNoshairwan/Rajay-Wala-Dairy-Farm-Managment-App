@@ -4,12 +4,14 @@ class UserModel {
   final String uid;
   final String role;
   final String name;
+  final String nickname;
   final String phone;
-  final String email;            // kept for Firebase Auth signup only
-  final String emergencyContact; // new
-  final double ratePerKg;        // new
+  final String email;
+  final String emergencyContact;
+  final double ratePerKg;
   final DeliveryAddress address;
   final bool isBlocked;
+  final bool isDead;
   final DateTime createdAt;
   final double outstandingBalance;
 
@@ -17,21 +19,27 @@ class UserModel {
     required this.uid,
     required this.role,
     required this.name,
+    this.nickname = '',
     required this.phone,
     required this.email,
     this.emergencyContact = '',
     this.ratePerKg = 0.0,
     required this.address,
     this.isBlocked = false,
+    this.isDead = false,
     required this.createdAt,
     this.outstandingBalance = 0.0,
   });
+
+  /// Short display name for compact UI (spreadsheet, lists)
+  String get displayName => nickname.isNotEmpty ? nickname : name;
 
   factory UserModel.fromMap(String uid, Map<String, dynamic> map) {
     return UserModel(
       uid: uid,
       role: (map['role'] ?? 'customer') as String,
       name: (map['name'] ?? '') as String,
+      nickname: (map['nickname'] ?? '') as String,
       phone: (map['phone'] ?? '') as String,
       email: (map['email'] ?? '') as String,
       emergencyContact: (map['emergencyContact'] ?? '') as String,
@@ -39,6 +47,7 @@ class UserModel {
       address: DeliveryAddress.fromMap(
           (map['address'] as Map<String, dynamic>?) ?? {}),
       isBlocked: (map['isBlocked'] ?? false) as bool,
+      isDead: (map['isDead'] ?? false) as bool,
       createdAt:
       (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       outstandingBalance:
@@ -49,12 +58,14 @@ class UserModel {
   Map<String, dynamic> toMap() => {
     'role': role,
     'name': name,
+    'nickname': nickname,
     'phone': phone,
     'email': email,
     'emergencyContact': emergencyContact,
     'ratePerKg': ratePerKg,
     'address': address.toMap(),
     'isBlocked': isBlocked,
+    'isDead': isDead,
     'createdAt': Timestamp.fromDate(createdAt),
     'outstandingBalance': outstandingBalance,
   };

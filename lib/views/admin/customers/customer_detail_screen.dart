@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/currency_formatter.dart';
 import '../../../core/utils/date_utils.dart';
@@ -8,7 +9,9 @@ import '../../../models/user_model.dart';
 import '../../../models/delivery_record_model.dart';
 import '../../../models/payment_model.dart';
 import '../../../services/map_service.dart';
+import '../../../viewmodels/admin_customer_viewmodel.dart';
 import '../billing/customer_ledger_screen.dart';
+import 'customer_bill_screen.dart';
 import 'customer_delivery_records_screen.dart';
 import 'customer_edit_screen.dart';
 
@@ -32,7 +35,8 @@ class _State extends State<CustomerDetailScreen> {
             ? UserModel.fromMap(widget.customer.uid, userSnap.data!.data()!)
             : widget.customer;
 
-        final hasLocation = customer.address.lat != 0 || customer.address.lng != 0;
+        final hasLocation =
+            customer.address.lat != 0 || customer.address.lng != 0;
 
         return Scaffold(
           appBar: AppBar(
@@ -53,6 +57,7 @@ class _State extends State<CustomerDetailScreen> {
           body: ListView(
             padding: const EdgeInsets.all(16),
             children: [
+              // 1. Profile
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
@@ -60,6 +65,8 @@ class _State extends State<CustomerDetailScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _row('Name', customer.name),
+                      if (customer.nickname.isNotEmpty)
+                        _row('Nickname', customer.nickname),
                       _row('Phone', customer.phone),
                       _row(
                           'Emergency',
@@ -79,113 +86,18 @@ class _State extends State<CustomerDetailScreen> {
               ),
               const SizedBox(height: 12),
 
-              // ─── Delivery Location card (view + directions) ──
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.location_on,
-                              color: AppColors.primary, size: 18),
-                          const SizedBox(width: 6),
-                          const Text('Delivery Location',
-                              style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        customer.address.fullAddress.isEmpty
-                            ? 'No address saved'
-                            : customer.address.fullAddress,
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                      if (hasLocation) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          '${customer.address.lat.toStringAsFixed(5)}, '
-                              '${customer.address.lng.toStringAsFixed(5)}',
-                          style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey.shade600),
-                        ),
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                icon: const Icon(Icons.map, size: 16),
-                                label: const Text('View on Map',
-                                    style: TextStyle(fontSize: 12)),
-                                onPressed: () => MapService.viewLocation(
-                                    customer.address.lat,
-                                    customer.address.lng),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                icon: const Icon(Icons.directions,
-                                    size: 16),
-                                label: const Text('Directions',
-                                    style: TextStyle(fontSize: 12)),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.primary,
-                                  foregroundColor: Colors.white,
-                                ),
-                                onPressed: () => MapService.getDirections(
-                                    customer.address.lat,
-                                    customer.address.lng),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ] else
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Text(
-                            'No coordinates saved. Edit customer to pick a location on the map.',
-                            style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey.shade600),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-
+              // 2. Calendar
               _CalendarCard(
                 customerId: customer.uid,
                 customerName: customer.name,
               ),
               const SizedBox(height: 12),
+
+              // 3. Transactions
               _TransactionsCard(customerId: customer.uid),
               const SizedBox(height: 12),
-              Card(
-                child: ListTile(
-                  leading: const Icon(Icons.delivery_dining,
-                      color: AppColors.primary),
-                  title: const Text('Full Delivery Records'),
-                  subtitle:
-                  const Text('Open calendar to edit every day'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => CustomerDeliveryRecordsScreen(
-                        customerId: customer.uid,
-                        customerName: customer.name,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+
+              // 4. Ledger
               Card(
                 child: ListTile(
                   leading: const Icon(Icons.menu_book,
@@ -203,6 +115,40 @@ class _State extends State<CustomerDetailScreen> {
                   ),
                 ),
               ),
+
+              // 5. View Bill by Date Range
+              Card(
+                // color: AppColors.primary.withValues(alpha: 0.05),
+                child: ListTile(
+                  leading: const Icon(Icons.request_quote,
+                      color: AppColors.primary),
+                  title: const Text('View Bill by Date Range',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: const Text(
+                      'Pick any From / To dates → see rate, days, kgs, amount'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          CustomerBillScreen(customer: customer),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // 6. Location
+              _LocationCard(
+                address: customer.address.fullAddress,
+                lat: customer.address.lat,
+                lng: customer.address.lng,
+                hasLocation: hasLocation,
+              ),
+              const SizedBox(height: 12),
+
+              // 7. Dead toggle
+              _DeadToggleCard(customer: customer),
             ],
           ),
         );
@@ -227,7 +173,182 @@ class _State extends State<CustomerDetailScreen> {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Calendar preview card (unchanged)
+// Location card
+// ─────────────────────────────────────────────────────────────
+class _LocationCard extends StatelessWidget {
+  final String address;
+  final double lat;
+  final double lng;
+  final bool hasLocation;
+
+  const _LocationCard({
+    required this.address,
+    required this.lat,
+    required this.lng,
+    required this.hasLocation,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.location_on,
+                    color: AppColors.primary, size: 18),
+                const SizedBox(width: 6),
+                const Text('Delivery Location',
+                    style: TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              address.isEmpty ? 'No address saved' : address,
+              style: const TextStyle(fontSize: 13),
+            ),
+            if (hasLocation) ...[
+              const SizedBox(height: 4),
+              Text(
+                '${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}',
+                style:
+                TextStyle(fontSize: 11, color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.map, size: 16),
+                      label: const Text('View on Map',
+                          style: TextStyle(fontSize: 12)),
+                      onPressed: () =>
+                          MapService.viewLocation(lat, lng),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.directions, size: 16),
+                      label: const Text('Directions',
+                          style: TextStyle(fontSize: 12)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: () =>
+                          MapService.getDirections(lat, lng),
+                    ),
+                  ),
+                ],
+              ),
+            ] else
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'No coordinates saved. Edit customer to pick a location on the map.',
+                  style: TextStyle(
+                      fontSize: 11, color: Colors.grey.shade600),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Dead toggle card
+// ─────────────────────────────────────────────────────────────
+class _DeadToggleCard extends StatelessWidget {
+  final UserModel customer;
+  const _DeadToggleCard({required this.customer});
+
+  Future<void> _onTap(BuildContext context) async {
+    final markingDead = !customer.isDead;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(markingDead ? 'Mark as Dead?' : 'Restore Customer?'),
+        content: Text(markingDead
+            ? '"${customer.name}" will be hidden from all lists, spreadsheet and billing. You can restore them later.'
+            : '"${customer.name}" will reappear in lists, spreadsheet and billing.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor:
+              markingDead ? AppColors.error : AppColors.success,
+              foregroundColor: Colors.white,
+            ),
+            child: Text(markingDead ? 'Mark as Dead' : 'Restore'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    await context
+        .read<AdminCustomerViewModel>()
+        .markDead(customer, markingDead);
+
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(markingDead
+            ? '${customer.name} moved to Dead Customers'
+            : '${customer.name} restored to Live'),
+        backgroundColor:
+        markingDead ? AppColors.error : AppColors.success,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDead = customer.isDead;
+    return Card(
+      color: isDead
+          ? AppColors.success.withValues(alpha: 0.08)
+          : AppColors.error.withValues(alpha: 0.05),
+      child: ListTile(
+        leading: Icon(
+          isDead ? Icons.restore : Icons.person_off,
+          color: isDead ? AppColors.success : AppColors.error,
+        ),
+        title: Text(
+          isDead ? 'Restore to Live Customers' : 'Mark as Dead',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: isDead ? AppColors.success : AppColors.error,
+          ),
+        ),
+        subtitle: Text(
+          isDead
+              ? 'Reappears in lists, spreadsheet and billing'
+              : 'Hidden from lists, spreadsheet and billing (restorable)',
+          style: const TextStyle(fontSize: 12),
+        ),
+        trailing: Icon(
+          Icons.chevron_right,
+          color: isDead ? AppColors.success : AppColors.error,
+        ),
+        onTap: () => _onTap(context),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Calendar preview card
 // ─────────────────────────────────────────────────────────────
 class _CalendarCard extends StatefulWidget {
   final String customerId;
@@ -243,6 +364,11 @@ class _CalendarCard extends StatefulWidget {
 class _CalendarCardState extends State<_CalendarCard> {
   final _monthFmt = DateFormat('MMMM yyyy');
   DateTime _month = DateTime.now();
+
+  String _fmtKg(double kg) {
+    if (kg == kg.truncateToDouble()) return kg.toInt().toString();
+    return kg.toStringAsFixed(1);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -362,9 +488,13 @@ class _CalendarCardState extends State<_CalendarCard> {
                                 fontWeight: FontWeight.bold,
                                 color: fg)),
                         if (kg > 0)
-                          Text('${kg.toStringAsFixed(1)}k',
+                          Text('${_fmtKg(kg)}kg',
+                              maxLines: 1,
+                              overflow: TextOverflow.clip,
                               style: TextStyle(
-                                  fontSize: 9, color: fg)),
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.w600,
+                                  color: fg)),
                       ],
                     ),
                   ));
@@ -391,7 +521,7 @@ class _CalendarCardState extends State<_CalendarCard> {
                       children: [
                         _stat('Days', '${byDay.length}'),
                         _stat('Total kg',
-                            '${totalKg.toStringAsFixed(1)} kg'),
+                            '${_fmtKg(totalKg)} kg'),
                         _stat('Amount',
                             CurrencyFormatter.format(totalAmount)),
                       ],
@@ -400,8 +530,7 @@ class _CalendarCardState extends State<_CalendarCard> {
                     SizedBox(
                       width: double.infinity,
                       child: OutlinedButton.icon(
-                        icon: const Icon(Icons.edit_calendar,
-                            size: 16),
+                        icon: const Icon(Icons.edit_calendar, size: 16),
                         label: const Text('Edit Days'),
                         onPressed: () => Navigator.push(
                           context,
@@ -441,7 +570,7 @@ class _CalendarCardState extends State<_CalendarCard> {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Transactions card — unchanged from previous version
+// Transactions card (unchanged)
 // ─────────────────────────────────────────────────────────────
 class _TransactionsCard extends StatelessWidget {
   final String customerId;
@@ -474,8 +603,8 @@ class _TransactionsCard extends StatelessWidget {
                 .toList()
                 : <PaymentModel>[];
 
-            final totalOwed = deliveries.fold<double>(
-                0.0, (s, d) => s + d.amount);
+            final totalOwed =
+            deliveries.fold<double>(0.0, (s, d) => s + d.amount);
             final totalReceived = payments
                 .where((p) => p.status != 'pending')
                 .fold<double>(0.0, (s, p) => s + p.amount);
@@ -558,8 +687,8 @@ class _TransactionsCard extends StatelessWidget {
                         itemBuilder: (context, i) {
                           final t = txs[i];
                           final isPayment = t.payment != null;
-                          final isPending = t.payment?.status ==
-                              'pending';
+                          final isPending =
+                              t.payment?.status == 'pending';
                           return ListTile(
                             dense: true,
                             onTap: isPayment
@@ -580,8 +709,7 @@ class _TransactionsCard extends StatelessWidget {
                               size: 18,
                             ),
                             title: Text(t.description,
-                                style:
-                                const TextStyle(fontSize: 13)),
+                                style: const TextStyle(fontSize: 13)),
                             subtitle: Text(
                                 AppDateUtils.formatDate(t.date),
                                 style: const TextStyle(fontSize: 11)),

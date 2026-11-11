@@ -52,22 +52,22 @@ class _State extends State<AdminDashboardScreen> {
                   Icons.warning_amber, AppColors.error),
             ],
           ),
-          const SizedBox(height: 12),
-          Card(
-            color: AppColors.primary,
-            child: ListTile(
-              leading: const Icon(Icons.autorenew,
-                  color: Colors.white, size: 32),
-              title: const Text('Active Subscriptions',
-                  style: TextStyle(
-                      color: Colors.white70, fontSize: 13)),
-              subtitle: Text('${vm.activeSubs} active subscriptions',
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold)),
-            ),
-          ),
+          // const SizedBox(height: 12),
+          // Card(
+          //   color: AppColors.primary,
+          //   child: ListTile(
+          //     leading: const Icon(Icons.autorenew,
+          //         color: Colors.white, size: 32),
+          //     title: const Text('Active Subscriptions',
+          //         style: TextStyle(
+          //             color: Colors.white70, fontSize: 13)),
+          //     subtitle: Text('${vm.activeSubs} active subscriptions',
+          //         style: const TextStyle(
+          //             color: Colors.white,
+          //             fontSize: 18,
+          //             fontWeight: FontWeight.bold)),
+          //   ),
+          // ),
           const SizedBox(height: 12),
           Card(
             child: ListTile(

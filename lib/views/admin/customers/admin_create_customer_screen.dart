@@ -14,6 +14,7 @@ class AdminCreateCustomerScreen extends StatefulWidget {
 
 class _State extends State<AdminCreateCustomerScreen> {
   final _name = TextEditingController();
+  final _nickname = TextEditingController();
   final _phone = TextEditingController();
   final _emergency = TextEditingController();
   final _rate = TextEditingController(text: '0');
@@ -53,6 +54,7 @@ class _State extends State<AdminCreateCustomerScreen> {
     try {
       await context.read<AdminCustomerViewModel>().createCustomer(
         name: _name.text.trim(),
+        nickname: _nickname.text.trim(),
         phone: _phone.text.trim(),
         emergencyContact: _emergency.text.trim(),
         ratePerKg: double.tryParse(_rate.text) ?? 0.0,
@@ -80,6 +82,10 @@ class _State extends State<AdminCreateCustomerScreen> {
         padding: const EdgeInsets.all(16),
         child: Column(children: [
           CustomTextField(controller: _name, label: 'Full Name'),
+          const SizedBox(height: 12),
+          CustomTextField(
+              controller: _nickname,
+              label: 'Nickname (for spreadsheet)'),
           const SizedBox(height: 12),
           CustomTextField(
               controller: _phone,
@@ -119,8 +125,7 @@ class _State extends State<AdminCreateCustomerScreen> {
                 Text(
                   '${_lat.toStringAsFixed(5)}, ${_lng.toStringAsFixed(5)}',
                   style: const TextStyle(
-                      fontSize: 11,
-                      color: AppColors.textSecondary),
+                      fontSize: 11, color: AppColors.textSecondary),
                 ),
               ],
             ),

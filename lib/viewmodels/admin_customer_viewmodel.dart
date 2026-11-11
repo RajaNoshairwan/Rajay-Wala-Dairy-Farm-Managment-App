@@ -8,13 +8,21 @@ class AdminCustomerViewModel extends ChangeNotifier {
   String _search = '';
   bool _loading = false;
 
+  /// Live customers only (isDead == false), filtered by search
   List<UserModel> get customers => _customers.where((c) {
+    if (c.isDead) return false;
     if (_search.isEmpty) return true;
     final q = _search.toLowerCase();
     return c.name.toLowerCase().contains(q) ||
+        c.nickname.toLowerCase().contains(q) ||
         c.phone.toLowerCase().contains(q) ||
         c.emergencyContact.toLowerCase().contains(q);
   }).toList();
+
+  /// Dead customers only
+  List<UserModel> get deadCustomers =>
+      _customers.where((c) => c.isDead).toList();
+
   bool get loading => _loading;
   List<UserModel> get allCustomers => _customers;
 
@@ -42,6 +50,7 @@ class AdminCustomerViewModel extends ChangeNotifier {
 
   Future<String> createCustomer({
     required String name,
+    required String nickname,
     required String phone,
     required String emergencyContact,
     required double ratePerKg,
@@ -54,6 +63,7 @@ class AdminCustomerViewModel extends ChangeNotifier {
       uid: '',
       role: 'customer',
       name: name,
+      nickname: nickname,
       phone: phone,
       email: '',
       emergencyContact: emergencyContact,
@@ -67,6 +77,9 @@ class AdminCustomerViewModel extends ChangeNotifier {
       createdAt: DateTime.now(),
     ));
   }
+
+  Future<void> markDead(UserModel c, bool isDead) =>
+      _service.setDead(c.uid, isDead);
 
   Future<void> toggleBlock(UserModel c) =>
       _service.blockCustomer(c.uid, !c.isBlocked);

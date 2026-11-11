@@ -20,17 +20,49 @@ class _State extends State<SpreadsheetScreen> {
   Map<String, Map<int, DeliveryRecordModel>> _records = {};
   bool _loading = true;
 
-  // Column widths
-  static const double _dayColW = 50.0;
-  static const double _custColW = 90.0;
-  static const double _totalColW = 70.0;
-  static const double _rowH = 36.0;
-  static const double _headerH = 46.0;
+  // Compact layout
+  static const double _dayColW = 24.0;
+  static const double _custColW = 26.0; // narrow columns for 50+ customers
+  static const double _totalColW = 40.0;
+  static const double _rowH = 20.0;
+  static const double _headerH = 32.0; // bottom total row height
+  static const double _nameHeaderH = 80.0; // tall header for rotated names
+
+  // Scroll controllers — outer header/body sync
+  final _hHeaderCtrl = ScrollController();
+  final _hBodyCtrl = ScrollController();
+  final _vLeftCtrl = ScrollController();
+  final _vBodyCtrl = ScrollController();
+  bool _syncing = false;
 
   @override
   void initState() {
     super.initState();
+    _hHeaderCtrl.addListener(() => _sync(_hHeaderCtrl, _hBodyCtrl));
+    _hBodyCtrl.addListener(() => _sync(_hBodyCtrl, _hHeaderCtrl));
+    _vLeftCtrl.addListener(() => _sync(_vLeftCtrl, _vBodyCtrl));
+    _vBodyCtrl.addListener(() => _sync(_vBodyCtrl, _vLeftCtrl));
     _load();
+  }
+
+  @override
+  void dispose() {
+    _hHeaderCtrl.dispose();
+    _hBodyCtrl.dispose();
+    _vLeftCtrl.dispose();
+    _vBodyCtrl.dispose();
+    super.dispose();
+  }
+
+  void _sync(ScrollController from, ScrollController to) {
+    if (_syncing) return;
+    if (!from.hasClients || !to.hasClients) return;
+    final max = to.position.maxScrollExtent;
+    final target = from.offset.clamp(0.0, max);
+    if ((to.offset - target).abs() < 0.5) return;
+    _syncing = true;
+    to.jumpTo(target);
+    _syncing = false;
   }
 
   Future<void> _load() async {
@@ -42,9 +74,14 @@ class _State extends State<SpreadsheetScreen> {
           .get();
       _customers = users.docs
           .map((d) => UserModel.fromMap(d.id, d.data()))
+          .where((c) => !c.isDead) // hide dead customers
           .toList()
-        ..sort((a, b) =>
-            a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+        ..sort((a, b) {
+          // Sort by display name (nickname-aware)
+          final an = a.nickname.isNotEmpty ? a.nickname : a.name;
+          final bn = b.nickname.isNotEmpty ? b.nickname : b.name;
+          return an.toLowerCase().compareTo(bn.toLowerCase());
+        });
 
       final deliveries = await FirebaseFirestore.instance
           .collection('delivery_records')
@@ -65,34 +102,44 @@ class _State extends State<SpreadsheetScreen> {
 
   int get _daysInMonth => DateTime(_month.year, _month.month + 1, 0).day;
 
+  /// Format preserving decimals — "5" for whole, "1.5" for decimal
+  String _fmtNum(double v) {
+    if (v == 0) return '';
+    if (v == v.truncateToDouble()) return v.toInt().toString();
+    final s = v.toString();
+    return s;
+  }
+
   Future<void> _editCell(UserModel customer, int day) async {
     final existing = _records[customer.uid]?[day];
     final qtyCtrl = TextEditingController(
-        text: existing?.quantityDelivered.toString() ?? '');
+        text: existing != null ? _fmtNum(existing.quantityDelivered) : '');
     final defaultRate =
     customer.ratePerKg > 0 ? customer.ratePerKg : 150.0;
     final rateCtrl = TextEditingController(
-        text: (existing?.priceAtDelivery ?? defaultRate).toStringAsFixed(0));
+        text: _fmtNum(existing?.priceAtDelivery ?? defaultRate));
 
     final saved = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         title: Text(
-            '${customer.name} · ${day}/${_month.month}/${_month.year}'),
+            '${customer.displayName} · $day/${_month.month}/${_month.year}'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: qtyCtrl,
-              keyboardType: TextInputType.number,
+              keyboardType:
+              const TextInputType.numberWithOptions(decimal: true),
               decoration: const InputDecoration(
                   labelText: 'Quantity (kg)',
-                  helperText: 'Leave blank to clear'),
+                  helperText: 'Decimals allowed, leave blank to clear'),
             ),
             const SizedBox(height: 8),
             TextField(
               controller: rateCtrl,
-              keyboardType: TextInputType.number,
+              keyboardType:
+              const TextInputType.numberWithOptions(decimal: true),
               decoration:
               const InputDecoration(labelText: 'Rate per kg (Rs)'),
             ),
@@ -243,7 +290,7 @@ class _State extends State<SpreadsheetScreen> {
       appBar: AppBar(title: const Text('Monthly Spreadsheet')),
       body: Column(
         children: [
-          // Month navigation
+          // Month nav
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
             child: Row(
@@ -304,27 +351,27 @@ class _State extends State<SpreadsheetScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
 
-          // Vertical table: days as rows, customers as columns
+          // Frozen grid
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _customers.isEmpty
-                ? const Center(child: Text('No customers'))
-                : _buildTable(days),
+                ? const Center(child: Text('No live customers'))
+                : _buildGrid(days),
           ),
 
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(10),
+            padding:
+            const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             color: Colors.grey.shade100,
             child: Text(
-              "Tap any cell to add or edit that day's quantity. "
-                  "Rows = days · Columns = customers.",
+              'Rows = days · Columns = customers. '
+                  'Tap any cell to edit · tap a name to see it in full.',
               textAlign: TextAlign.center,
-              style:
-              TextStyle(fontSize: 11, color: Colors.grey.shade700),
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
             ),
           ),
         ],
@@ -332,54 +379,180 @@ class _State extends State<SpreadsheetScreen> {
     );
   }
 
-  Widget _buildTable(List<int> days) {
-    return SingleChildScrollView(
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _headerRow(),
-            for (final day in days) _dayRow(day),
-            _totalsRow(days),
+  /// Rotated customer-name header cell (reads bottom → top).
+  /// Tap to see the full name in a dialog.
+  Widget _nameHeaderCell(UserModel c) {
+    return GestureDetector(
+      onTap: () => showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: Text(c.displayName),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
           ],
+        ),
+      ),
+      child: Container(
+        width: _custColW,
+        height: _nameHeaderH,
+        decoration: BoxDecoration(
+          color: AppColors.primary,
+          border: Border.all(color: Colors.white24, width: 0.5),
+        ),
+        child: RotatedBox(
+          quarterTurns: 3, // text reads bottom → top
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                c.displayName,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 10,
+                    height: 1.1),
+              ),
+            ),
+          ),
         ),
       ),
     );
   }
 
-  Widget _headerRow() {
-    return Row(
+  Widget _buildGrid(List<int> days) {
+    return Column(
       children: [
-        _headerCell('Day', _dayColW, alignLeft: true),
-        for (final c in _customers) _headerCell(c.name, _custColW),
-        _headerCell('Total', _totalColW),
-      ],
-    );
-  }
+        // ── Frozen header row (customer names, rotated) ─────
+        SizedBox(
+          height: _nameHeaderH,
+          child: Row(
+            children: [
+              // top-left corner
+              Container(
+                width: _dayColW,
+                height: _nameHeaderH,
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  border: Border.all(color: Colors.white24, width: 0.5),
+                ),
+                child: const Center(
+                  child: Text('Day',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 10)),
+                ),
+              ),
+              // customer headers (horizontal scroll, synced with body)
+              Expanded(
+                child: SingleChildScrollView(
+                  controller: _hHeaderCtrl,
+                  scrollDirection: Axis.horizontal,
+                  physics: const ClampingScrollPhysics(),
+                  child: Row(
+                    children: [
+                      for (final c in _customers) _nameHeaderCell(c),
+                      Container(
+                        width: _totalColW,
+                        height: _nameHeaderH,
+                        decoration: BoxDecoration(
+                          color: AppColors.primary,
+                          border:
+                          Border.all(color: Colors.white24, width: 0.5),
+                        ),
+                        child: const Center(
+                          child: Text('Total',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 10)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
 
-  Widget _headerCell(String text, double width,
-      {bool alignLeft = false}) {
-    return Container(
-      width: width,
-      height: _headerH,
-      padding: const EdgeInsets.symmetric(horizontal: 6),
-      alignment:
-      alignLeft ? Alignment.centerLeft : Alignment.center,
-      decoration: BoxDecoration(
-        color: AppColors.primary,
-        border: Border.all(color: Colors.white24, width: 0.5),
-      ),
-      child: Text(
-        text,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        textAlign: alignLeft ? TextAlign.left : TextAlign.center,
-        style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            fontSize: 11),
-      ),
+        // ── Body ───────────────────────────────────────────
+        Expanded(
+          child: Row(
+            children: [
+              // Frozen day column (vertical scroll synced with body)
+              SizedBox(
+                width: _dayColW,
+                child: SingleChildScrollView(
+                  controller: _vLeftCtrl,
+                  physics: const ClampingScrollPhysics(),
+                  child: Column(
+                    children: [
+                      for (final d in days)
+                        Container(
+                          width: _dayColW,
+                          height: _rowH,
+                          padding:
+                          const EdgeInsets.symmetric(horizontal: 6),
+                          alignment: Alignment.centerLeft,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade100,
+                            border: Border.all(
+                                color: Colors.grey.shade300, width: 0.5),
+                          ),
+                          child: Text('$d',
+                              style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600)),
+                        ),
+                      // Aligns with grand-total row at body bottom
+                      Container(
+                        width: _dayColW,
+                        height: _headerH,
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        alignment: Alignment.centerLeft,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade200,
+                          border: Border.all(
+                              color: Colors.grey.shade400, width: 0.5),
+                        ),
+                        child: const Text('Total',
+                            style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              // Body grid (both axes scroll)
+              Expanded(
+                child: SingleChildScrollView(
+                  controller: _hBodyCtrl,
+                  scrollDirection: Axis.horizontal,
+                  physics: const ClampingScrollPhysics(),
+                  child: SingleChildScrollView(
+                    controller: _vBodyCtrl,
+                    physics: const ClampingScrollPhysics(),
+                    child: Column(
+                      children: [
+                        for (final d in days) _dayRow(d),
+                        _grandTotalRow(days),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -388,37 +561,21 @@ class _State extends State<SpreadsheetScreen> {
     for (final c in _customers) {
       rowSum += _records[c.uid]?[day]?.quantityDelivered ?? 0.0;
     }
-
     return Row(
       children: [
-        Container(
-          width: _dayColW,
-          height: _rowH,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          alignment: Alignment.centerLeft,
-          decoration: BoxDecoration(
-            color: Colors.grey.shade100,
-            border:
-            Border.all(color: Colors.grey.shade300, width: 0.5),
-          ),
-          child: Text('$day',
-              style: const TextStyle(
-                  fontSize: 12, fontWeight: FontWeight.w600)),
-        ),
         for (final c in _customers) _dataCell(c, day),
         Container(
           width: _totalColW,
           height: _rowH,
           decoration: BoxDecoration(
             color: Colors.grey.shade50,
-            border:
-            Border.all(color: Colors.grey.shade300, width: 0.5),
+            border: Border.all(color: Colors.grey.shade300, width: 0.5),
           ),
           child: Center(
             child: Text(
-              rowSum > 0 ? '${rowSum.toStringAsFixed(0)}' : '',
-              style: const TextStyle(
-                  fontSize: 11, fontWeight: FontWeight.bold),
+              rowSum > 0 ? _fmtNum(rowSum) : '',
+              style:
+              const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
             ),
           ),
         ),
@@ -437,19 +594,15 @@ class _State extends State<SpreadsheetScreen> {
           color: rec != null
               ? AppColors.primary.withValues(alpha: 0.08)
               : Colors.white,
-          border:
-          Border.all(color: Colors.grey.shade300, width: 0.5),
+          border: Border.all(color: Colors.grey.shade300, width: 0.5),
         ),
         child: Center(
           child: Text(
-            rec?.quantityDelivered.toStringAsFixed(0) ?? '',
+            rec != null ? _fmtNum(rec.quantityDelivered) : '',
             style: TextStyle(
-              fontSize: 12,
-              fontWeight:
-              rec != null ? FontWeight.bold : FontWeight.normal,
-              color: rec != null
-                  ? AppColors.primary
-                  : Colors.grey.shade400,
+              fontSize: 10,
+              fontWeight: rec != null ? FontWeight.bold : FontWeight.normal,
+              color: rec != null ? AppColors.primary : Colors.grey.shade400,
             ),
           ),
         ),
@@ -457,76 +610,58 @@ class _State extends State<SpreadsheetScreen> {
     );
   }
 
-  Widget _totalsRow(List<int> days) {
+  Widget _grandTotalRow(List<int> days) {
     return Row(
       children: [
-        Container(
-          width: _dayColW,
-          height: _headerH,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          alignment: Alignment.centerLeft,
-          decoration: BoxDecoration(
-            color: Colors.grey.shade200,
-            border:
-            Border.all(color: Colors.grey.shade400, width: 0.5),
-          ),
-          child: const Text('Total',
-              style: TextStyle(
-                  fontSize: 12, fontWeight: FontWeight.bold)),
-        ),
         for (final c in _customers)
-          _customerTotalCell(c, days),
-        _grandTotalCell(days),
+          Container(
+            width: _custColW,
+            height: _headerH,
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.15),
+              border: Border.all(color: Colors.grey.shade400, width: 0.5),
+            ),
+            child: Center(
+              child: () {
+                final recs = _records[c.uid] ?? {};
+                final total = recs.values.fold<double>(
+                    0.0, (s, r) => s + r.quantityDelivered);
+                return Text(
+                  total > 0 ? _fmtNum(total) : '—',
+                  style: const TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primary),
+                );
+              }(),
+            ),
+          ),
+        Container(
+          width: _totalColW,
+          height: _headerH,
+          decoration: BoxDecoration(
+            color: AppColors.primary,
+            border: Border.all(color: Colors.grey.shade400, width: 0.5),
+          ),
+          child: Center(
+            child: () {
+              double grand = 0.0;
+              for (final c in _customers) {
+                final recs = _records[c.uid] ?? {};
+                grand += recs.values.fold<double>(
+                    0.0, (s, r) => s + r.quantityDelivered);
+              }
+              return Text(
+                _fmtNum(grand),
+                style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white),
+              );
+            }(),
+          ),
+        ),
       ],
-    );
-  }
-
-  Widget _customerTotalCell(UserModel c, List<int> days) {
-    final recs = _records[c.uid] ?? {};
-    final total =
-    recs.values.fold<double>(0.0, (s, r) => s + r.quantityDelivered);
-    return Container(
-      width: _custColW,
-      height: _headerH,
-      decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.15),
-        border: Border.all(color: Colors.grey.shade400, width: 0.5),
-      ),
-      child: Center(
-        child: Text(
-          total > 0 ? '${total.toStringAsFixed(0)} kg' : '—',
-          style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              color: AppColors.primary),
-        ),
-      ),
-    );
-  }
-
-  Widget _grandTotalCell(List<int> days) {
-    double grand = 0.0;
-    for (final c in _customers) {
-      final recs = _records[c.uid] ?? {};
-      grand +=
-          recs.values.fold<double>(0.0, (s, r) => s + r.quantityDelivered);
-    }
-    return Container(
-      width: _totalColW,
-      height: _headerH,
-      decoration: BoxDecoration(
-        color: AppColors.primary,
-        border: Border.all(color: Colors.grey.shade400, width: 0.5),
-      ),
-      child: Center(
-        child: Text(
-          '${grand.toStringAsFixed(0)}',
-          style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-              color: Colors.white),
-        ),
-      ),
     );
   }
 }

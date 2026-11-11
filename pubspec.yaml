@@ -141,11 +141,11 @@ flutter_launcher_icons:
   remove_alpha_ios: true # Recommended for iOS App Store submission
 
 flutter_native_splash:
-  color: "#FFFFFF" # Background color
-  image: assets/logo/logo.jpg # Path to your logo
-  # For Android 12+ specific configuration
+  color: "#FFFFFF"
+  image: assets/logo/logo.jpg
   android_12:
     color: "#FFFFFF"
-#    image: assets/logo/splash_logo_android12.png # Often needs a separate image
-  # Ensure the logo fits properly on iOS
+    image: assets/logo/logo.jpg   # <--- Add this line
+    # Optional: if your logo has a background color
+    # icon_background_color: "#FFFFFF"
   ios_content_mode: scaleAspectFit

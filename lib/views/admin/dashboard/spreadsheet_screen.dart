@@ -14,6 +14,7 @@ class SpreadsheetScreen extends StatefulWidget {
 
 class _State extends State<SpreadsheetScreen> {
   final _monthFmt = DateFormat('MMMM yyyy');
+  final _dayFmt = DateFormat('EEE'); // Mon, Tue, ...
   final _billing = BillingService();
   DateTime _month = DateTime.now();
   List<UserModel> _customers = [];
@@ -21,11 +22,11 @@ class _State extends State<SpreadsheetScreen> {
   bool _loading = true;
 
   // Compact layout
-  static const double _dayColW = 24.0;
+  static const double _dayColW = 60.0;  // widened to fit "15 Wed"
   static const double _custColW = 26.0; // narrow columns for 50+ customers
   static const double _totalColW = 40.0;
-  static const double _rowH = 20.0;
-  static const double _headerH = 32.0; // bottom total row height
+  static const double _rowH = 22.0;     // slightly taller for readability
+  static const double _headerH = 32.0;  // bottom total row height
   static const double _nameHeaderH = 80.0; // tall header for rotated names
 
   // Scroll controllers — outer header/body sync
@@ -74,10 +75,9 @@ class _State extends State<SpreadsheetScreen> {
           .get();
       _customers = users.docs
           .map((d) => UserModel.fromMap(d.id, d.data()))
-          .where((c) => !c.isDead) // hide dead customers
+          .where((c) => !c.isDead)
           .toList()
         ..sort((a, b) {
-          // Sort by display name (nickname-aware)
           final an = a.nickname.isNotEmpty ? a.nickname : a.name;
           final bn = b.nickname.isNotEmpty ? b.nickname : b.name;
           return an.toLowerCase().compareTo(bn.toLowerCase());
@@ -102,12 +102,10 @@ class _State extends State<SpreadsheetScreen> {
 
   int get _daysInMonth => DateTime(_month.year, _month.month + 1, 0).day;
 
-  /// Format preserving decimals — "5" for whole, "1.5" for decimal
   String _fmtNum(double v) {
     if (v == 0) return '';
     if (v == v.truncateToDouble()) return v.toInt().toString();
-    final s = v.toString();
-    return s;
+    return v.toString();
   }
 
   Future<void> _editCell(UserModel customer, int day) async {
@@ -364,8 +362,12 @@ class _State extends State<SpreadsheetScreen> {
 
           Container(
             width: double.infinity,
-            padding:
-            const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            padding: EdgeInsets.fromLTRB(
+              10,
+              8,
+              10,
+              8 + MediaQuery.of(context).padding.bottom,
+            ),
             color: Colors.grey.shade100,
             child: Text(
               'Rows = days · Columns = customers. '
@@ -380,7 +382,6 @@ class _State extends State<SpreadsheetScreen> {
   }
 
   /// Rotated customer-name header cell (reads bottom → top).
-  /// Tap to see the full name in a dialog.
   Widget _nameHeaderCell(UserModel c) {
     return GestureDetector(
       onTap: () => showDialog(
@@ -403,7 +404,7 @@ class _State extends State<SpreadsheetScreen> {
           border: Border.all(color: Colors.white24, width: 0.5),
         ),
         child: RotatedBox(
-          quarterTurns: 3, // text reads bottom → top
+          quarterTurns: 3,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 6),
             child: Align(
@@ -425,15 +426,53 @@ class _State extends State<SpreadsheetScreen> {
     );
   }
 
+  /// Frozen left column cell — shows "15 Wed" (date bold + weekday lighter)
+  Widget _dayLabelCell(int day) {
+    final date = DateTime(_month.year, _month.month, day);
+    final weekday = _dayFmt.format(date); // Mon, Tue, ...
+    return Container(
+      width: _dayColW,
+      height: _rowH,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        border: Border.all(color: Colors.grey.shade300, width: 0.5),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 18,
+            child: Text(
+              '$day',
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                  fontSize: 11, fontWeight: FontWeight.bold),
+            ),
+          ),
+          const SizedBox(width: 5),
+          Expanded(
+            child: Text(
+              weekday,
+              style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey.shade600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildGrid(List<int> days) {
     return Column(
       children: [
-        // ── Frozen header row (customer names, rotated) ─────
+        // ── Frozen header row ────────────────────────────────
         SizedBox(
           height: _nameHeaderH,
           child: Row(
             children: [
-              // top-left corner
+              // top-left corner (two lines: Date / Day)
               Container(
                 width: _dayColW,
                 height: _nameHeaderH,
@@ -442,11 +481,20 @@ class _State extends State<SpreadsheetScreen> {
                   border: Border.all(color: Colors.white24, width: 0.5),
                 ),
                 child: const Center(
-                  child: Text('Day',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 10)),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text('Date',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 11)),
+                      SizedBox(height: 2),
+                      Text('Day',
+                          style: TextStyle(
+                              color: Colors.white70, fontSize: 10)),
+                    ],
+                  ),
                 ),
               ),
               // customer headers (horizontal scroll, synced with body)
@@ -463,8 +511,8 @@ class _State extends State<SpreadsheetScreen> {
                         height: _nameHeaderH,
                         decoration: BoxDecoration(
                           color: AppColors.primary,
-                          border:
-                          Border.all(color: Colors.white24, width: 0.5),
+                          border: Border.all(
+                              color: Colors.white24, width: 0.5),
                         ),
                         child: const Center(
                           child: Text('Total',
@@ -482,11 +530,11 @@ class _State extends State<SpreadsheetScreen> {
           ),
         ),
 
-        // ── Body ───────────────────────────────────────────
+        // ── Body ─────────────────────────────────────────────
         Expanded(
           child: Row(
             children: [
-              // Frozen day column (vertical scroll synced with body)
+              // Frozen date+day column
               SizedBox(
                 width: _dayColW,
                 child: SingleChildScrollView(
@@ -494,28 +542,13 @@ class _State extends State<SpreadsheetScreen> {
                   physics: const ClampingScrollPhysics(),
                   child: Column(
                     children: [
-                      for (final d in days)
-                        Container(
-                          width: _dayColW,
-                          height: _rowH,
-                          padding:
-                          const EdgeInsets.symmetric(horizontal: 6),
-                          alignment: Alignment.centerLeft,
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade100,
-                            border: Border.all(
-                                color: Colors.grey.shade300, width: 0.5),
-                          ),
-                          child: Text('$d',
-                              style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600)),
-                        ),
-                      // Aligns with grand-total row at body bottom
+                      for (final d in days) _dayLabelCell(d),
+                      // Aligns with grand-total row
                       Container(
                         width: _dayColW,
                         height: _headerH,
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        padding:
+                        const EdgeInsets.symmetric(horizontal: 6),
                         alignment: Alignment.centerLeft,
                         decoration: BoxDecoration(
                           color: Colors.grey.shade200,
